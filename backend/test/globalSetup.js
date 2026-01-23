@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const { dataSource } = require('../db/data-source')
 
 /**

@@ -1,75 +1,122 @@
-version: "3.8"
+version: "3.8" # 指定 Docker Compose 規格版本 (3.8 支援現代多數功能)
+
+# --- 全域持久化空間定義 ---
 volumes:
   pgData:
+    # 定義名為 pgData 的具名卷 (Named Volume)
+    # 用途：將資料庫資料存在容器外，確保執行 docker-compose down 後資料不會消失
+
 services:
+  # 開始定義各項服務實例
+  # ==========================================
+  # 1. 資料庫服務 (PostgreSQL)
+  # ==========================================
   postgres:
-    image: postgres:16.4-alpine3.20
+    image: postgres:16.4-alpine3.20 # 使用 PostgreSQL 16.4 的輕量級 Linux (Alpine) 版本
     environment:
-      - POSTGRES_USER=${DB_USERNAME}
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
-      - POSTGRES_DB=${DB_DATABASE}
+      # 設定容器啟動時的環境變數
+      - POSTGRES_USER=${DB_USERNAME} # 資料庫連線使用者帳號 (讀取自同目錄下 .env)
+      - POSTGRES_PASSWORD=${DB_PASSWORD} # 資料庫連線密碼 (讀取自同目錄下 .env)
+      - POSTGRES_DB=${DB_DATABASE} # 啟動後預設建立的資料庫名稱 (來自 .env)
     volumes:
-      - pgData:/var/lib/postgresql/data
-    ports:
-      - 5432:5432
+      # 設定磁碟掛載
+      - pgData:/var/lib/postgresql/data # 將 pgData 卷掛載到容器內部的資料庫存儲路徑
+      #ports:
+      # 設定埠號對應    # ports:
+      #   - 5432:5432 # 為了安全性，不將資料庫埠號暴露給主機 (僅允許內部網路連線)連進資料庫
     deploy:
-      replicas: 1
+      # 部署相關設定
+      replicas: 1 # 確保始終只啟動 1 個資料庫實例
     networks:
-      - bootcamp_network
+      # 指定使用的網路
+      - bootcamp_network # 加入 bootcamp_network，以便與後端溝通
     healthcheck:
-      test:
-        ["CMD-SHELL", "sh -c 'pg_isready -U ${DB_USERNAME} -d ${DB_DATABASE}'"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
+      # 健康檢查設定 (讓其他服務知道資料庫何時準備就緒)
+      # 執行指令檢查資料庫是否可連線
+      test: [ "CMD-SHELL", "sh -c 'pg_isready -U ${DB_USERNAME} -d ${DB_DATABASE}'" ]
+      interval: 10s # 每 10 秒執行一次檢查
+      timeout: 3s # 單次檢查逾時時間為 3 秒
+      retries: 3 # 若連續失敗 3 次，則判定為不健康 (Unhealthy)
+
+  # ==========================================
+  # 2. 後端伺服器 (API Service)
+  # ==========================================
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      # 現場建置映像檔
+      context: ./backend # 指定後端原始碼所在的目錄路徑
+      dockerfile: Dockerfile # 使用該路徑下的 Dockerfile 作為建置藍圖
     env_file:
-      - .env
+      # 載入環境變數檔案
+      - .env # 所有的 API Key 或資料庫帳密將自動注入該容器
     volumes:
-      - ./.env:/app/.env:ro
-    ports:
-      - "${PORT}:${PORT}"
+      # 掛載檔案
+      - ./.env:/app/.env:ro # 將 .env 掛載進去供程式讀取 (ro 代表 Read-Only 唯讀)
+      #ports:
+      # ports:
+      #   - "${PORT}:${PORT}" # 為了安全性，後端不直接暴露埠號，改由 Frontend Nginx 代理轉發變數，例如 8080:8080
     networks:
+      # 指定網路
       - bootcamp_network
     depends_on:
+      # 設定啟動先後順序
       postgres:
-        condition: service_healthy
+        # 相依於資料庫
+        condition: service_healthy # 關鍵：直到 postgres 通過健康檢查才啟動後端，避免連不到 DB
     logging:
-      driver: "json-file"
+      # 日誌管理 (防止 Log 塞爆硬碟)
+      driver: "json-file" # 將記錄存為 JSON 格式的檔案
       options:
-        max-size: "10m"
-        max-file: 3
-        compress: "true"
+        # 日誌細節設定
+        max-size: "10m" # 單一日誌檔案達 10 Megabytes 即捲動 (Rotate)
+        max-file: 3 # 最多保留 3 個舊的日誌檔
+        compress: "true" # 舊日誌自動進行壓縮
     healthcheck:
+      # 後端的健康檢查
+      # 檢查 API 的健康檢查路徑 (蜘蛛模式 spider 只存取不下載內容)
       test: wget --no-verbose --tries=1 --spider http://localhost:${PORT}/healthcheck || exit 1
-      interval: 30s
-      retries: 3
-      start_period: 20s
-      timeout: 30s
+      interval: 30s # 每 30 秒確認一次後端是否活著
+      retries: 3 # 失敗 3 次判定為故障
+      start_period: 20s # 給予 20 秒緩衝期讓服務啟動，期間內的失敗不納入計數
+      timeout: 30s # 健康檢查指令逾時時間
     deploy:
-      replicas: 1
+      # 部署設定
+      replicas: 1 # 啟動 1 個後端實例
+
+  # ==========================================
+  # 3. 前端界面 (Frontend App)
+  # ==========================================
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      # 建置前端映像檔
+      context: ./frontend # 指定前端原始碼目錄
+      dockerfile: Dockerfile # 使用前端 Dockerfile
       args:
-        - VITE_API_BASE_URL=${VITE_API_BASE_URL}
+        # 在建置 (Build) 時傳入的關鍵變數
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL} # 告訴前端 API 要打到哪裡
     env_file:
+      # 載入變數
       - .env
     ports:
-      - "3000:80"
+      # 埠號對應
+      - "3000:80" # 打開瀏覽器輸入 localhost:3000 即可存取 (對應容器內 Nginx 80 埠)
     networks:
+      # 指定網路
       - bootcamp_network
     logging:
+      # 日誌管理 (與後端一致)
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: 3
         compress: "true"
     deploy:
-      replicas: 1
+      # 部署設定
+      replicas: 1 # 啟動 1 個前端實例
+
+# --- 虛擬網路定義 ---
 networks:
   bootcamp_network:
+    # 定義一個內部私有網路
+    # 說明：這讓 postgres, backend, frontend 可以互相連線
+    # 且服務間可直接使用名稱連線 (例如 backend 連資料庫可用 host: postgres)
