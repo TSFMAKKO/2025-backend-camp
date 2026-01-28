@@ -2,6 +2,8 @@ const express = require('express')
 const cors = require('cors')
 const path = require('path')
 const pinoHttp = require('pino-http')
+const swaggerUi = require('swagger-ui-express')
+const swaggerSpec = require('./config/swagger')
 
 const logger = require('./utils/logger')('App')
 const creditPackageRouter = require('./routes/creditPackage')
@@ -31,6 +33,10 @@ app.get('/healthcheck', (req, res) => {
   res.status(200)
   res.send('OK')
 })
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: '健身房課程預約系統 API 文檔'
+}))
 app.use('/api/credit-package', creditPackageRouter)
 app.use('/api/coaches/skill', skillRouter)
 app.use('/api/users', usersRouter)
