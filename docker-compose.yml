@@ -21,9 +21,9 @@ services:
     volumes:
       # 設定磁碟掛載
       - pgData:/var/lib/postgresql/data # 將 pgData 卷掛載到容器內部的資料庫存儲路徑
-      #ports:
-      # 設定埠號對應    # ports:
-      #   - 5432:5432 # 為了安全性，不將資料庫埠號暴露給主機 (僅允許內部網路連線)連進資料庫
+    ports:
+      # 設定埠號對應
+      - "5432:5432" # 開啟端口映射，允許從主機連接資料庫
     deploy:
       # 部署相關設定
       replicas: 1 # 確保始終只啟動 1 個資料庫實例
