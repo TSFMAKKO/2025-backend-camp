@@ -31,7 +31,7 @@ app.use(
 );
 app.use(express.static(path.join(__dirname, "public")));
 
-app.get("/healthcheck", (req, res) => {
+app.get('/healthcheck', (req, res) => {
   res.status(200).json({
     status: "success",
     message: "OK",
