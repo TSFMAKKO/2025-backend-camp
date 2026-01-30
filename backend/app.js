@@ -37,6 +37,7 @@ app.get("/healthcheck", (req, res) => {
     message: "OK",
   });
 });
+
 app.use(
   "/api-docs",
   swaggerUi.serve,
