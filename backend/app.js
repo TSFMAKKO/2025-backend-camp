@@ -27,9 +27,11 @@ app.use(pinoHttp({
 }))
 app.use(express.static(path.join(__dirname, 'public')))
 
-app.get('/healthcheck', (req, res) => {
-  res.status(200)
-  res.send('OK')
+app.get("/healthcheck", (req, res) => {
+  res.status(200).json({
+  status: 'success',
+  message: 'OK'
+})
 })
 app.use('/api/credit-package', creditPackageRouter)
 app.use('/api/coaches/skill', skillRouter)
